@@ -1,0 +1,16 @@
+server:
+  persistentVolume:
+    enabled: true
+    size: 2Gi
+    storageClass: standard
+alertmanager:
+  persistentVolume:
+    enabled: true
+    size: 1Gi
+    storageClass: standard
+scrape_configs:
+  - job_name: "kind-api"
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+        - api.kind-demo.svc.cluster.local:3000

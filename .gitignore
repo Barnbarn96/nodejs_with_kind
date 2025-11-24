@@ -1,0 +1,29 @@
+# Node modules
+node_modules/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS / Editor / Tooling
+.DS_Store
+.vscode/
+.idea/
+*.swp
+
+# Docker
+# Dockerfile*
+# docker-compose*
+.dockerignore
+
+# Build artifacts
+dist/
+coverage/
+*.test.js
+*.spec.js
+
+# Environment
+.env
+.env.*.local
