@@ -66,8 +66,9 @@ app.get("/health", (req, res) => res.send("ok"));
 app.get("/ready", (req, res) => res.send("ready"));
 
 // Simulated error endpoint
-app.get("/error", (req, res) => {
-  throw new Error("Simulated failure");
+app.get('/error', (req, res) => {
+    errorCounter.inc({ route: '/error' });
+    res.status(500).send('Simulated API error');
 });
 
 // Global error handler (also tracked)

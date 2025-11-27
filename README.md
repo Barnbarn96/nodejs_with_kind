@@ -16,6 +16,10 @@
 
 run sripts run-all.sh to setup the kind cluster, building of image and loading image into the kind cluster.
 
+
+### 1.1 Setting up alertmanager integration with discord
+replace the '${DISCORD_WEBHOOK_URL}' in ./monitoring/prometheus-values.yaml with the discord webhook uri.
+
 ### 2. Access the api
 ```bash
 curl http://localhost/api

@@ -1,6 +1,7 @@
 # Node modules
 node_modules/
 
+./monitoring/discord-webhook-url.yaml
 # Logs
 npm-debug.log*
 yarn-debug.log*

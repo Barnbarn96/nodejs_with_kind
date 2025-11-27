@@ -1,16 +1,154 @@
+# server:
+#   persistentVolume:
+#     enabled: true
+#     size: 2Gi
+#     storageClass: standard
+#   extraArgs:
+#     enable-feature: "true"
+
+# alertmanager:
+#   persistentVolume:
+#     enabled: true
+#     size: 1Gi
+#     storageClass: standard
+
+# # For adding custom scrape configs without overwriting defaults
+# scrape_configs:
+#   - job_name: "kind-api"
+#     metrics_path: /metrics
+#     static_configs:
+#       - targets:
+#           - api.kind-demo.svc.cluster.local:80
+  
+# # For adding custom rules
+# additionalPrometheusRulesMap:
+#   api-alerts: # This creates a file named api-alerts.yaml
+#     groups:
+#       - name: api-alerts
+#         rules:
+#           - alert: HighErrorRate
+#             expr: rate(api_errors_total[1m]) > 0
+#             for: 1m
+#             labels:
+#               severity: warning
+#             annotations:
+#               summary: "High API error rate"
+#               description: "API errors detected in the last minute"
+
+# configmapReload:
+#   prometheus:
+#     enabled: true
+
 server:
   persistentVolume:
     enabled: true
     size: 2Gi
     storageClass: standard
+  extraArgs:
+    enable-feature: "true"
+
 alertmanager:
   persistentVolume:
     enabled: true
     size: 1Gi
     storageClass: standard
-scrape_configs:
+
+  config:
+    global:
+      resolve_timeout: 5m
+    
+    route:
+      receiver: 'discord-default'
+      group_by: ['alertname']
+      group_wait: 10s
+      group_interval: 10s
+      repeat_interval: 12h
+      routes:
+        - match:
+            severity: warning
+          receiver: 'discord-warnings'
+        - match:
+            severity: critical
+          receiver: 'discord-critical'
+    
+    receivers:
+      - name: 'discord-default'
+        discord_configs:
+          - webhook_url: '${DISCORD_WEBHOOK_URL}'
+            send_resolved: true
+            title: '{{ .GroupLabels.alertname }}'
+            message: |-
+              {{ range .Alerts }}
+              **Summary:** {{ .Annotations.summary }}
+              **Description:** {{ .Annotations.description }}
+              **Severity:** {{ .Labels.severity }}
+              {{ end }}
+      
+      - name: 'discord-warnings'
+        discord_configs:
+          - webhook_url: '${DISCORD_WEBHOOK_URL}'
+            send_resolved: true
+            title: '⚠️ Warning: {{ .GroupLabels.alertname }}'
+            message: |-
+              {{ range .Alerts }}
+              **{{ .Annotations.summary }}**
+              {{ .Annotations.description }}
+              {{ end }}
+      
+      - name: 'discord-critical'
+        discord_configs:
+          - webhook_url: '${DISCORD_WEBHOOK_URL}'
+            send_resolved: true
+            title: '🚨 Critical: {{ .GroupLabels.alertname }}'
+            message: |-
+              {{ range .Alerts }}
+              **{{ .Annotations.summary }}**
+              {{ .Annotations.description }}
+              {{ end }}
+
+
+
+# Add your custom scrape config without overriding defaults
+extraScrapeConfigs: |
   - job_name: "kind-api"
     metrics_path: /metrics
     static_configs:
       - targets:
-        - api.kind-demo.svc.cluster.local:3000
+          - api.kind-demo.svc.cluster.local:80
+
+serverFiles:
+  alerting_rules.yml:
+    groups:
+      - name: api-alerts
+        rules:
+          # Alert if there are ANY errors (total counter)
+          - alert: HTTPErrorsPresent
+            expr: sum(http_errors_total) > 0
+            for: 30s
+            labels:
+              severity: warning
+            annotations:
+              summary: "HTTP errors detected"
+              description: "Total errors count: {{ $value }}"
+          # Test alert that always fires
+          - alert: TestAlert
+            expr: vector(1)
+            labels:
+              severity: warning
+            annotations:
+              summary: "🧪 Test Alert"
+              description: "This is a test alert to verify Discord integration"
+
+
+alerting:
+  alertmanagers:
+  - static_configs:
+    - targets: ['prom-alertmanager:9093']
+            
+configmapReload:
+  prometheus:
+    enabled: true
+  alertmanager:
+    enabled: true
+
+
