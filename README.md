@@ -28,3 +28,4 @@ curl http://localhost/api/health → liveness probe
 curl http://localhost/api/error → simulate API error
 
 
+
