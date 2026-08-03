@@ -1,0 +1,18 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+    extraPortMappings:
+      - containerPort: 80      # Ingress controller listens here
+        hostPort: 80           # Windows localhost:80
+        protocol: TCP
+      - containerPort: 443
+        hostPort: 8443     # 443 is taken on the Windows host (IP Helper / DirectAccess)
+        protocol: TCP
+      - containerPort: 30000   # Your NodePort API service
+        hostPort: 30000
+        protocol: TCP
+      - containerPort: 32000
+        hostPort: 32000
+  - role: worker
+  - role: worker

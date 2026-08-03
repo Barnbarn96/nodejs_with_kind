@@ -1,0 +1,12 @@
+persistence:
+  enabled: true
+  size: 2Gi
+  storageClassName: standard
+
+adminPassword: "admin"
+service:
+  type: NodePort
+  nodePort: 32000
+
+
+# http://prom-prometheus-server.monitoring.svc.cluster.local
