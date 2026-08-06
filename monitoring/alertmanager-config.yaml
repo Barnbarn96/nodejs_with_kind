@@ -1,0 +1,123 @@
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: AlertmanagerConfig
+metadata:
+  name: triage-routing
+  namespace: monitoring
+  labels:
+    release: kube-prom-stack
+spec:
+  route:
+    # Root fallback: with alertmanagerConfigMatcherStrategy=None (needed so
+    # this config's namespace, `monitoring`, doesn't get auto-injected as a
+    # matcher — see the note below), this CR's route subtree applies to
+    # EVERY alert cluster-wide, not just ours. Without an explicit namespace
+    # gate here, kube-prometheus-stack's own bundled default rules
+    # (KubeProxyInstanceUnreachable, CPUThrottlingHigh, etc.) all fall
+    # through to whatever this root receiver is — confirmed live, they
+    # flooded Discord via discord-default before this gate was added.
+    # `noop` here just means "not this config's problem"; Alertmanager's
+    # own top-level default route (receiver "null") already drops them the
+    # same way if this CR weren't installed at all.
+    receiver: noop
+    routes:
+      - matchers:
+          - name: namespace
+            matchType: "=~"
+            value: "default|kind-demo"
+        continue: false
+        receiver: discord-default
+        groupBy: ["alertname", "namespace", "pod"]
+        groupWait: 10s
+        groupInterval: 10s
+        repeatInterval: 12h
+        routes:
+          # Must come FIRST — routes are first-match-wins, and the severity
+          # routes below would otherwise swallow these before the bridge sees them.
+          - matchers:
+              - name: alertname
+                matchType: "=~"
+                value: "Pod(CrashLooping|ImagePullFailing|NotReady|OOMKilled|Unschedulable)"
+            receiver: triage-bridge
+          # Inhibit-only signal — never meant to reach Discord itself.
+          - matchers:
+              - name: alertname
+                value: PodRestartingRepeatedly
+            receiver: noop
+          - matchers:
+              - name: severity
+                value: warning
+            receiver: discord-warnings
+          - matchers:
+              - name: severity
+                value: critical
+            receiver: discord-critical
+  receivers:
+    - name: discord-default
+      discordConfigs:
+        - apiURL:
+            name: discord-webhooks
+            key: default-url
+          sendResolved: true
+          title: '{{ .GroupLabels.alertname }}'
+          message: |-
+            {{ range .Alerts }}
+            **Summary:** {{ .Annotations.summary }}
+            **Description:** {{ .Annotations.description }}
+            **Severity:** {{ .Labels.severity }}
+            {{ end }}
+    - name: triage-bridge
+      webhookConfigs:
+        - url: "http://host.docker.internal:8080/alert"
+          sendResolved: false
+    - name: noop
+    - name: discord-warnings
+      discordConfigs:
+        - apiURL:
+            name: discord-webhooks
+            key: default-url
+          sendResolved: true
+          title: '⚠️ Warning: {{ .GroupLabels.alertname }}'
+          message: |-
+            {{ range .Alerts }}
+            **{{ .Annotations.summary }}**
+            {{ .Annotations.description }}
+            {{ end }}
+    - name: discord-critical
+      discordConfigs:
+        - apiURL:
+            name: discord-webhooks
+            key: default-url
+          sendResolved: true
+          title: '🚨 Critical: {{ .GroupLabels.alertname }}'
+          message: |-
+            {{ range .Alerts }}
+            **{{ .Annotations.summary }}**
+            {{ .Annotations.description }}
+            {{ end }}
+  # Suppress the generic NotReady alert once a more specific root-cause
+  # alert is already firing for the same pod. PodCrashLooping/PodOOMKilled/
+  # PodImagePullFailing alone aren't reliable inhibit sources — their
+  # expressions read instantaneous `reason` gauges that can go quiet as a
+  # container cycles states during a backoff storm, so PodRestartingRepeatedly
+  # (restart *count* over a window) is included as a sticky backstop.
+  inhibitRules:
+    - sourceMatch:
+        - { name: alertname, value: PodCrashLooping }
+      targetMatch:
+        - { name: alertname, value: PodNotReady }
+      equal: ["namespace", "pod"]
+    - sourceMatch:
+        - { name: alertname, value: PodImagePullFailing }
+      targetMatch:
+        - { name: alertname, value: PodNotReady }
+      equal: ["namespace", "pod"]
+    - sourceMatch:
+        - { name: alertname, value: PodOOMKilled }
+      targetMatch:
+        - { name: alertname, value: PodNotReady }
+      equal: ["namespace", "pod"]
+    - sourceMatch:
+        - { name: alertname, value: PodRestartingRepeatedly }
+      targetMatch:
+        - { name: alertname, value: PodNotReady }
+      equal: ["namespace", "pod"]

@@ -1,0 +1,73 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: pod-health
+  namespace: monitoring
+  labels:
+    release: kube-prom-stack
+spec:
+  groups:
+    - name: pod-health
+      rules:
+        - alert: PodCrashLooping
+          expr: kube_pod_container_status_waiting_reason{reason="CrashLoopBackOff"} > 0
+          for: 30s
+          labels:
+            severity: critical
+          annotations:
+            summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} is crash-looping"
+            description: "Container {{ $labels.container }} is in CrashLoopBackOff."
+
+        - alert: PodImagePullFailing
+          expr: kube_pod_container_status_waiting_reason{reason=~"ImagePullBackOff|ErrImagePull"} > 0
+          for: 30s
+          labels:
+            severity: critical
+          annotations:
+            summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} cannot pull its image"
+            description: "Container {{ $labels.container }} is stuck pulling its image."
+
+        - alert: PodNotReady
+          # Excludes pods that are merely starting, and Job pods that have
+          # legitimately finished (Succeeded/Failed are never "ready").
+          expr: |
+            kube_pod_status_ready{condition="true"} == 0
+            unless on(namespace, pod) kube_pod_status_phase{phase=~"Succeeded|Failed"} == 1
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} has been not-ready for 5m"
+            description: "Pod is not passing its readiness checks."
+
+        - alert: PodOOMKilled
+          expr: kube_pod_container_status_last_terminated_reason{reason="OOMKilled"} == 1
+          for: 30s
+          labels:
+            severity: critical
+          annotations:
+            summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} was OOMKilled"
+            description: "Container {{ $labels.container }} was killed for exceeding its memory limit."
+
+        - alert: PodUnschedulable
+          # A pod stuck Pending past scheduling time — requests too large
+          # for any node, no matching taints/tolerations, etc.
+          expr: kube_pod_status_phase{phase="Pending"} == 1
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} is stuck Pending"
+            description: "Pod has not been scheduled for over 2m."
+
+        - alert: PodRestartingRepeatedly
+          # Inhibit-only signal (see AlertmanagerConfig's inhibitRules) —
+          # restart *count* over a window stays true for the whole backoff
+          # storm, unlike the reason gauges above which can flicker.
+          expr: increase(kube_pod_container_status_restarts_total[10m]) > 2
+          for: 30s
+          labels:
+            severity: critical
+          annotations:
+            summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} is restarting repeatedly"
+            description: "Container {{ $labels.container }} has restarted more than twice in the last 10m."

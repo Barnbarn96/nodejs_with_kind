@@ -1,4 +1,9 @@
 #!/bin/bash
+# Stop on the first failing step instead of cascading — without this, an
+# early failure (e.g. create-cluster.sh) used to leave later steps running
+# build/load/deploy against a half-broken or nonexistent cluster, producing
+# confusing downstream errors instead of a clean stop.
+set -euo pipefail
 
 # Checked up front, not at the last step: deploy-monitoring.sh needs this to
 # substitute the webhook placeholder, and failing there means a full cluster
@@ -14,7 +19,7 @@ fi
 ./scripts/build-image.sh
 ./scripts/load-image.sh
 # Wait for cluster to be ready
-sleep 10  
+sleep 60
 # Retry deploy.sh up to 3 times
 echo "🚀 Starting deployment with retry logic..."
 for i in {1..3}; do

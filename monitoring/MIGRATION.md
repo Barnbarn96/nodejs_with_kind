@@ -1,7 +1,14 @@
 # Migration: `prometheus-community/prometheus` → Prometheus Operator (CRDs)
 
-Not started yet — this is the plan, written up before touching anything so
-the migration itself can be reviewed/discussed first.
+**Status: complete.** All steps below were carried out and validated live —
+alert coverage, routing, and inhibition confirmed via real triage runs
+against injected failures (see the "Inhibiting on a `reason` gauge doesn't
+survive a backoff storm" section of `k8s-triage-agent/WRITEUP.md`, and the
+namespace-scoping and Discord-template gaps found and fixed here). The old
+`prom` release has been uninstalled; `deploy-prometheus.sh` and
+`prometheus-values.yaml` are dead code kept only for history until removed.
+The sections below are left as-written (originally the pre-migration plan)
+since they still accurately describe what each piece does.
 
 ## Why
 
@@ -239,12 +246,20 @@ spec:
   `kube-prometheus-stack`'s bundled operator version before assuming this
   works verbatim; if it doesn't, inhibition has to live in the top-level
   `Alertmanager` CR's `spec.alertmanagerConfiguration` instead.
-- `AlertmanagerConfig` is namespaced and, by default, only applies to alerts
-  originating from rules in the *same* namespace unless the top-level
-  `Alertmanager` CR sets `alertmanagerConfigMatcherStrategy: None` (match
-  everything) — otherwise `api-alerts`/`pod-health` PrometheusRules and this
-  `AlertmanagerConfig` all need to agree on namespace, or routing silently
-  stops matching.
+- **Confirmed live, not just a risk:** by default the Operator injects a
+  `namespace=<AlertmanagerConfig's own namespace>` matcher into every route
+  and inhibit rule it generates from an `AlertmanagerConfig` — this
+  `triage-routing` object lives in `monitoring`, but the alerts it routes
+  carry `namespace="default"` (the demo pods' actual namespace). Dumping the
+  live Alertmanager config (`kubectl get secret
+  alertmanager-kube-prom-stack-kube-prome-alertmanager-generated -n
+  monitoring -o jsonpath='{.data.alertmanager\.yaml\.gz}' | base64 -d |
+  gunzip`) showed every route wrapped in `matchers: [namespace="monitoring"]`
+  — meaning `triage-bridge` would never have received a real alert at all,
+  silently, with no error anywhere. Fixed with `kubectl patch alertmanager
+  kube-prom-stack-kube-prome-alertmanager -n monitoring --type=merge -p
+  '{"spec":{"alertmanagerConfigMatcherStrategy":{"type":"None"}}}'` (now
+  baked into `deploy-operator-resources.sh`, not a one-off manual step).
 - Discord's `discordConfigs` field on `AlertmanagerConfig` requires a modern
   enough Alertmanager (>= v0.25) — confirm the chart's bundled Alertmanager
   version supports it before relying on it; older versions only had generic

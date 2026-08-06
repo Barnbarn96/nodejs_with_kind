@@ -1,0 +1,21 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: api-alerts
+  namespace: monitoring
+  labels:
+    release: kube-prom-stack
+spec:
+  groups:
+    - name: api-alerts
+      rules:
+        # http_errors_total is a monotonic counter — rate() over a window
+        # gives "errors happening now", which is what an alert should mean.
+        - alert: HTTPErrorsPresent
+          expr: sum(rate(http_errors_total[5m])) > 0
+          for: 30s
+          labels:
+            severity: warning
+          annotations:
+            summary: "HTTP errors detected"
+            description: 'Error rate: {{ $value | printf "%.3f" }}/s over the last 5m'
