@@ -8,6 +8,10 @@ on:
       - src/**
       - package.json
       - package-lock.json
+  # Lets the first image be built on demand (Actions tab → this workflow →
+  # Run workflow) without needing an unrelated code change to satisfy the
+  # paths filter above.
+  workflow_dispatch: {}
 
 env:
   # Hardcoded lowercase, not ${{ github.repository_owner }} — Docker image
