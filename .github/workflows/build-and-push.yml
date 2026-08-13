@@ -23,7 +23,7 @@ jobs:
   build-and-push:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       packages: write
     steps:
       - uses: actions/checkout@v4
@@ -43,3 +43,17 @@ jobs:
           tags: |
             ${{ env.IMAGE }}:${{ github.sha }}
             ${{ env.IMAGE }}:latest
+
+      - name: Bump the Rollout to the new image tag
+        run: |
+          sed -i "s|image: ${{ env.IMAGE }}:.*|image: ${{ env.IMAGE }}:${{ github.sha }}|" \
+            gitops/apps/kind-api/rollout.yaml
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add gitops/apps/kind-api/rollout.yaml
+          # Nothing to commit if the tag didn't actually change (re-running
+          # the same commit's build, workflow_dispatch replay, etc.) —
+          # `git commit` would fail the step for no reason otherwise.
+          git diff --cached --quiet && echo "No manifest change, skipping commit." || \
+            git commit -m "Deploy ${{ github.sha }} to kind-api [skip ci]"
+          git push origin HEAD:release
