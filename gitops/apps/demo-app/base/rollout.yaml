@@ -1,0 +1,44 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: demo-app
+  labels:
+    app: demo-app
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app: demo-app
+  template:
+    metadata:
+      labels:
+        app: demo-app
+    spec:
+      containers:
+        - name: demo-app
+          image: hashicorp/http-echo:1.0
+          args:
+            - "-text=v2"
+          ports:
+            - containerPort: 5678
+          # Gives a bad canary something to actually fail on — a broken
+          # image/args (e.g. wrong port, crashing command) fails this and
+          # the Rollout holds at the canary weight instead of proceeding.
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 5678
+            initialDelaySeconds: 2
+            periodSeconds: 5
+  strategy:
+    canary:
+      steps:
+        - setWeight: 25
+        - pause:
+            duration: 30s
+        - setWeight: 50
+        - pause:
+            duration: 30s
+        - setWeight: 75
+        - pause:
+            duration: 30s

@@ -1,0 +1,51 @@
+# App-of-apps: this one file is what you point ArgoCD at
+# (`argocd app create -f gitops/argocd/app-of-apps.yaml` or via the UI),
+# and it owns one child Application per environment. Each child syncs its
+# own Kustomize overlay independently, so dev and prod can drift/rollback
+# separately without touching this file again.
+#
+# Originally a separate standalone repo (gitops-kind-demo); merged into
+# this repo so the whole cluster setup — app, monitoring, and GitOps —
+# lives in one place. See gitops/WRITEUP.md and gitops/PLAN.md for the
+# history and design decisions behind it.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: demo-app-dev
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Barnbarn96/nodejs_with_kind.git
+    targetRevision: HEAD
+    path: gitops/apps/demo-app/overlays/dev
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: demo-app-dev
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: demo-app-prod
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Barnbarn96/nodejs_with_kind.git
+    targetRevision: HEAD
+    path: gitops/apps/demo-app/overlays/prod
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: demo-app-prod
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

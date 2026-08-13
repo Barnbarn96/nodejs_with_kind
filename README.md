@@ -33,3 +33,7 @@ curl http://localhost/api/ready → readiness probe
 curl http://localhost/api/health → liveness probe
 curl http://localhost/api/error → simulate API error
 ```
+
+### 3. GitOps pipeline (ArgoCD + Argo Rollouts)
+Optional, layered on top of the same cluster — see [`gitops/README.md`](gitops/README.md)
+for setup, and `gitops/WRITEUP.md` for the canary/rollback story this demos.
