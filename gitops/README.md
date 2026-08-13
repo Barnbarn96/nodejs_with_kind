@@ -53,12 +53,14 @@ gitops/
 - `kubectl` (uses `kubectl kustomize`, no separate `kustomize` binary needed)
 - This repo pushed to GitHub — ArgoCD needs a real Git remote to watch,
   it can't sync from a local-only working tree
-- For `kind-api` specifically: at least one push to `release` that's
-  triggered `.github/workflows/build-and-push.yml`, and the resulting
-  `ghcr.io/barnbarn96/nodejs_with_kind` package set to **Public** in
-  GitHub → your profile → Packages (GHCR images default to private even
-  on a public repo; a private image needs a pull secret the cluster
-  doesn't have configured)
+- For `kind-api` specifically: at least one push to `release` touching
+  `src/`/`Dockerfile`/the package files, to trigger
+  `.github/workflows/build-and-push.yml` and produce a real image tag —
+  the `Rollout` bootstraps against `:latest`, which won't exist until
+  that first build runs. (No manual "set package visibility" step needed
+  in practice — the first image pushed here was already pullable
+  anonymously; see `WRITEUP.md` if a private-by-default GHCR package
+  ever does need to be made public.)
 
 ### 1. Sanity-check the manifests render correctly
 ```bash
@@ -106,9 +108,19 @@ see `WRITEUP.md` for why a manual `kubectl`/UI-only rollback would get
 fought by `selfHeal` and doesn't actually stick.
 
 ### 5. Canary / rollback demo — kind-api (the real thing)
-Push a code change to `src/` on `release` — the workflow builds and
-pushes a new `ghcr.io/barnbarn96/nodejs_with_kind:<git-sha>` image. Bump
-`gitops/apps/kind-api/rollout.yaml`'s image tag to that sha, commit, push:
-same canary steps, but now backed by the app's own real `/health`/`/ready`
-probes instead of a toy `http-echo` endpoint. Same rollback mechanism
-(`git revert`) applies.
+Push a code change to `src/` on `release` — that's the *only* manual step.
+The workflow builds and pushes a new
+`ghcr.io/barnbarn96/nodejs_with_kind:<git-sha>` image, then commits that
+tag straight into `gitops/apps/kind-api/rollout.yaml` and pushes it back
+(as `github-actions[bot]`) — no manual YAML editing needed. ArgoCD picks
+up that commit and Argo Rollouts walks the same canary steps as
+`demo-app`, backed by the app's own real `/health`/`/ready`/`/version`
+endpoints instead of a toy `http-echo` one.
+
+```bash
+kubectl get rollout api -n kind-demo -w
+curl http://localhost/api/version   # confirm it's serving the new version
+```
+
+Same rollback mechanism (`git revert` on the *code* commit — CI will
+build and auto-bump a revert image the same way) applies.
