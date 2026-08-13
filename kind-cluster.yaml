@@ -1,5 +1,12 @@
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
+networking:
+  # Without this, kind binds the API server to a random free host port on
+  # every `kind create cluster` — meaning every respin silently breaks any
+  # already-running process (the triage bridge, kubectl in another shell,
+  # etc.) still pointed at the old port, until `kind export kubeconfig` is
+  # re-run. Pinning it means the port never changes across respins.
+  apiServerPort: 6443
 nodes:
   - role: control-plane
     kubeadmConfigPatches:

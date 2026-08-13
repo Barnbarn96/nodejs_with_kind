@@ -16,8 +16,11 @@ fi
 
 # Run scripts one by one
 ./scripts/create-cluster.sh
-./scripts/build-image.sh
-./scripts/load-image.sh
+# No local build/load step anymore — the api image is built and pushed to
+# ghcr.io by .github/workflows/build-and-push.yml on every push to
+# `release`, and deployed via ArgoCD (gitops/apps/kind-api/), not here.
+# This means a bare run-all.sh no longer brings up a running `api` app by
+# itself — see gitops/README.md for the ArgoCD/Rollouts setup that does.
 # Wait for cluster to be ready
 sleep 60
 # Retry deploy.sh up to 3 times

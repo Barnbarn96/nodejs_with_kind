@@ -3,31 +3,47 @@
 A GitOps deployment pipeline layered on top of this repo's KIND cluster:
 ArgoCD watches this directory, Kustomize overlays drive dev/prod config,
 and Argo Rollouts demonstrates a canary rollout with automatic rollback on
-a bad deploy.
+a bad deploy — for both a small standalone demo app and this repo's own
+`kind-api` app.
 
 Originally built as a separate standalone repo (`gitops-kind-demo`) and
 merged in here so the whole cluster setup — app, monitoring, and GitOps —
 lives in one place. See `PLAN.md` for the original rationale/build order
 and `WRITEUP.md` for what building and running it actually surfaced
 (CRD size limits, ArgoCD's polling delay, why a bad canary stalls silently,
-why only a git-level fix survives `selfHeal`).
+why only a git-level fix survives `selfHeal`, and why `kind-api` wasn't
+wired in immediately — see below for how that got resolved).
 
-Currently demos against a small standalone `http-echo` app
-(`apps/demo-app/`), not the `kind-api` app itself — see `WRITEUP.md`'s
-last section for why that was deliberately deferred (no local image
-registry yet, so there's nothing for a `Rollout` to pull by tag on a
-`kind-api` code change).
+## `kind-api` is now GitOps-managed too
+
+`manifests/deployment.yaml` is gone — `kind-api` is now a `Rollout`
+(`apps/kind-api/rollout.yaml`), built and pushed to `ghcr.io` by
+`.github/workflows/build-and-push.yml` on every push to `release`, and
+deployed by ArgoCD like everything else here. `scripts/build-image.sh` /
+`load-image.sh` (local build + `kind load docker-image`, bypassing any
+registry) are gone too — there's now exactly one way the app image gets
+built and deployed, not a local-only path and a GitOps path that could
+drift apart.
+
+`scripts/deploy.sh` still applies everything else the app needs (RBAC,
+`ConfigMap`, `Secret`, `Service`, HPA, Ingress, PV/PVC) — just not the
+workload resource itself anymore, since ArgoCD owns that now and a second
+controller applying a plain `Deployment` with the same pod selector would
+fight it for ownership.
 
 ## Structure
 
 ```
 gitops/
-  apps/demo-app/
-    base/                 # Rollout (canary strategy) + Service for a tiny http-echo demo app
-    overlays/dev/         # 2 replicas, text=dev-v1
-    overlays/prod/        # base replica count, text=v1
+  apps/
+    demo-app/
+      base/                 # Rollout (canary strategy) + Service for a tiny http-echo demo app
+      overlays/dev/         # 2 replicas, text=dev-v1
+      overlays/prod/        # base replica count, text=v1
+    kind-api/
+      rollout.yaml           # this repo's real app, same canary strategy
   argocd/
-    app-of-apps.yaml       # one file, two child Applications (dev + prod)
+    app-of-apps.yaml         # one file, three child Applications
 ```
 
 ## Setup
@@ -37,11 +53,18 @@ gitops/
 - `kubectl` (uses `kubectl kustomize`, no separate `kustomize` binary needed)
 - This repo pushed to GitHub — ArgoCD needs a real Git remote to watch,
   it can't sync from a local-only working tree
+- For `kind-api` specifically: at least one push to `release` that's
+  triggered `.github/workflows/build-and-push.yml`, and the resulting
+  `ghcr.io/barnbarn96/nodejs_with_kind` package set to **Public** in
+  GitHub → your profile → Packages (GHCR images default to private even
+  on a public repo; a private image needs a pull secret the cluster
+  doesn't have configured)
 
 ### 1. Sanity-check the manifests render correctly
 ```bash
 kubectl kustomize gitops/apps/demo-app/overlays/dev
 kubectl kustomize gitops/apps/demo-app/overlays/prod
+kubectl kustomize gitops/apps/kind-api
 ```
 
 ### 2. Install ArgoCD and Argo Rollouts
@@ -62,11 +85,12 @@ kubectl -n argocd port-forward svc/argocd-server 8080:443
 kubectl apply -f gitops/argocd/app-of-apps.yaml
 ```
 
-**Done when:** `kubectl get applications -n argocd` shows `demo-app-dev` and
-`demo-app-prod` both `Synced`/`Healthy`, and
-`kubectl get pods -n demo-app-prod` shows 4 running `demo-app` pods.
+**Done when:** `kubectl get applications -n argocd` shows `demo-app-dev`,
+`demo-app-prod`, and `kind-api` all `Synced`/`Healthy`, and
+`kubectl get pods -n kind-demo` shows the `api` pods running the `ghcr.io`
+image (not `kind-api:latest` anymore).
 
-### 4. Canary / rollback demo
+### 4. Canary / rollback demo — demo-app
 Edit `apps/demo-app/base/rollout.yaml`'s container `args`, commit, push —
 ArgoCD auto-syncs and Argo Rollouts walks the canary steps
 (`setWeight: 25 → pause → 50 → pause → 75 → pause → 100`) automatically.
@@ -80,3 +104,11 @@ To roll back: `git revert <bad-sha>` and push. ArgoCD auto-syncs the
 reverted manifest and Argo Rollouts aborts the bad canary automatically —
 see `WRITEUP.md` for why a manual `kubectl`/UI-only rollback would get
 fought by `selfHeal` and doesn't actually stick.
+
+### 5. Canary / rollback demo — kind-api (the real thing)
+Push a code change to `src/` on `release` — the workflow builds and
+pushes a new `ghcr.io/barnbarn96/nodejs_with_kind:<git-sha>` image. Bump
+`gitops/apps/kind-api/rollout.yaml`'s image tag to that sha, commit, push:
+same canary steps, but now backed by the app's own real `/health`/`/ready`
+probes instead of a toy `http-echo` endpoint. Same rollback mechanism
+(`git revert`) applies.

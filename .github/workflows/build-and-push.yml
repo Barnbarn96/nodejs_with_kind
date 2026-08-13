@@ -1,0 +1,41 @@
+name: Build and push image
+
+on:
+  push:
+    branches: [release]
+    paths:
+      - Dockerfile
+      - src/**
+      - package.json
+      - package-lock.json
+
+env:
+  # Hardcoded lowercase, not ${{ github.repository_owner }} — Docker image
+  # paths must be lowercase, but that expression resolves to the
+  # account's actual casing ("Barnbarn96"), which would break the push.
+  IMAGE: ghcr.io/barnbarn96/nodejs_with_kind
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ github.sha }}
+            ${{ env.IMAGE }}:latest
