@@ -18,9 +18,8 @@ fi
 ./scripts/create-cluster.sh
 # No local build/load step anymore — the api image is built and pushed to
 # ghcr.io by .github/workflows/build-and-push.yml on every push to
-# `release`, and deployed via ArgoCD (gitops/apps/kind-api/), not here.
-# This means a bare run-all.sh no longer brings up a running `api` app by
-# itself — see gitops/README.md for the ArgoCD/Rollouts setup that does.
+# `release`, and deployed via ArgoCD (gitops/apps/kind-api/) further below,
+# not here.
 # Wait for cluster to be ready
 sleep 60
 # Retry deploy.sh up to 3 times
@@ -42,3 +41,35 @@ for i in {1..3}; do
 done
 ./scripts/deploy-metrics-server.sh
 ./scripts/deploy-monitoring.sh
+
+echo "🚀 Installing ArgoCD and Argo Rollouts..."
+./scripts/install-argocd.sh
+./scripts/install-argo-rollouts.sh
+
+echo "🚀 Registering GitOps Applications (demo-app-dev, demo-app-prod, kind-api)..."
+kubectl apply -f gitops/argocd/app-of-apps.yaml
+
+# install-argocd.sh/install-argo-rollouts.sh already wait for their own
+# controllers to roll out, so the Application CRD is established by this
+# point — this loop is waiting for ArgoCD to actually pull, sync, and get
+# each app's pods healthy, not just for the apply above to succeed.
+echo "⏳ Waiting for GitOps Applications to sync..."
+for app in demo-app-dev demo-app-prod kind-api; do
+  synced=""
+  for i in $(seq 1 30); do
+    # `|| true` — a transient kubectl error here (e.g. right after apply,
+    # before the object is fully registered) would otherwise trip `set -e`
+    # and kill the whole script instead of letting this loop retry.
+    synced=$(kubectl get application "$app" -n argocd -o jsonpath='{.status.sync.status}/{.status.health.status}' 2>/dev/null) || true
+    if [ "$synced" = "Synced/Healthy" ]; then
+      echo "✅ $app Synced/Healthy"
+      break
+    fi
+    sleep 5
+  done
+  if [ "$synced" != "Synced/Healthy" ]; then
+    echo "❌ $app did not reach Synced/Healthy in time (last status: ${synced:-unknown})"
+    echo "   kubectl describe application $app -n argocd"
+    exit 1
+  fi
+done

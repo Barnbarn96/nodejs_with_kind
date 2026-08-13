@@ -48,6 +48,13 @@ gitops/
 
 ## Setup
 
+`run-all.sh` now runs steps 2 and 3 below automatically as part of cluster
+bring-up — a plain `run-all.sh` brings up a fully working `kind-api`
+again, ArgoCD/Rollouts included. The steps below are for running or
+re-running the GitOps layer on its own (e.g. after `run-all.sh` already
+ran, or if `argocd`/`argo-rollouts` got wiped without a full cluster
+respin).
+
 ### 0. Prerequisites
 - The KIND cluster from this repo's own `run-all.sh` already running
 - `kubectl` (uses `kubectl kustomize`, no separate `kustomize` binary needed)
