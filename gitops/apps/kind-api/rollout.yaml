@@ -23,7 +23,7 @@ spec:
           # Bootstraps against :latest — bump to a specific :<git-sha> tag
           # (pushed by .github/workflows/build-and-push.yml on every push
           # to `release`) to trigger a real canary rollout.
-          image: ghcr.io/barnbarn96/nodejs_with_kind:latest
+          image: ghcr.io/barnbarn96/nodejs_with_kind:60e9c301fc48b2446b33c51c8b85f8bc9c02b4e5
           imagePullPolicy: Always
           ports:
             - containerPort: 3000
