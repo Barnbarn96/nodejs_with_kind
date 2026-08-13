@@ -4,7 +4,7 @@ const client = require("prom-client");
 const app = express();
 const port = process.env.PORT || 3000;
 const env  = process.env.ENV || "development";
-const version = process.env.APP_VERSION || "v1";
+const version = process.env.APP_VERSION || "v2";
 
 // Prometheus Registry
 const register = new client.Registry();
