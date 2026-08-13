@@ -4,6 +4,7 @@ const client = require("prom-client");
 const app = express();
 const port = process.env.PORT || 3000;
 const env  = process.env.ENV || "development";
+const version = process.env.APP_VERSION || "v1";
 
 // Prometheus Registry
 const register = new client.Registry();
@@ -64,6 +65,7 @@ app.get("/", (req, res) => {
 
 app.get("/health", (req, res) => res.send("ok"));
 app.get("/ready", (req, res) => res.send("ready"));
+app.get("/version", (req, res) => res.send(version));
 
 // Simulated error endpoint
 app.get('/error', (req, res) => {
