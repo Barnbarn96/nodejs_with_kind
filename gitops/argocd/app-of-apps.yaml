@@ -17,7 +17,10 @@ spec:
   project: default
   source:
     repoURL: https://github.com/Barnbarn96/nodejs_with_kind.git
-    targetRevision: HEAD
+    # HEAD resolves to origin/main on GitHub, which is unrelated, stale
+    # content from before this repo's real work began (left untouched
+    # deliberately) — all real work lives on the `release` branch instead.
+    targetRevision: release
     path: gitops/apps/demo-app/overlays/dev
   destination:
     server: https://kubernetes.default.svc
@@ -38,7 +41,10 @@ spec:
   project: default
   source:
     repoURL: https://github.com/Barnbarn96/nodejs_with_kind.git
-    targetRevision: HEAD
+    # HEAD resolves to origin/main on GitHub, which is unrelated, stale
+    # content from before this repo's real work began (left untouched
+    # deliberately) — all real work lives on the `release` branch instead.
+    targetRevision: release
     path: gitops/apps/demo-app/overlays/prod
   destination:
     server: https://kubernetes.default.svc
