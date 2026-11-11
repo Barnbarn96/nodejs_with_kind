@@ -13,6 +13,12 @@ on:
   # paths filter above.
   workflow_dispatch: {}
 
+# Builds queue instead of running in parallel: two pushes close together
+# would otherwise race on the manifest-bump commit below.
+concurrency:
+  group: build-and-push-release
+  cancel-in-progress: false
+
 env:
   # Hardcoded lowercase, not ${{ github.repository_owner }} — Docker image
   # paths must be lowercase, but that expression resolves to the
@@ -20,7 +26,13 @@ env:
   IMAGE: ghcr.io/barnbarn96/nodejs_with_kind
 
 jobs:
+  # Same tests and manifest checks as ci.yml — nothing gets built or
+  # deployed unless they pass.
+  checks:
+    uses: ./.github/workflows/ci.yml
+
   build-and-push:
+    needs: checks
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -35,25 +47,31 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Only the immutable :<sha> tag — the Rollout always pins an exact
+      # SHA, so a moving :latest tag was unused and just invited confusion.
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .
           push: true
-          tags: |
-            ${{ env.IMAGE }}:${{ github.sha }}
-            ${{ env.IMAGE }}:latest
+          tags: ${{ env.IMAGE }}:${{ github.sha }}
 
       - name: Bump the Rollout to the new image tag
         run: |
-          sed -i "s|image: ${{ env.IMAGE }}:.*|image: ${{ env.IMAGE }}:${{ github.sha }}|" \
-            gitops/apps/kind-api/rollout.yaml
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add gitops/apps/kind-api/rollout.yaml
+          # Rebase onto whatever landed on `release` while this build ran,
+          # so the push below doesn't fail as non-fast-forward.
+          git pull --rebase origin release
+          sed -i "s|image: ${{ env.IMAGE }}:.*|image: ${{ env.IMAGE }}:${{ github.sha }}|" \
+            gitops/apps/kind-api/base/rollout.yaml
+          git add gitops/apps/kind-api/base/rollout.yaml
           # Nothing to commit if the tag didn't actually change (re-running
           # the same commit's build, workflow_dispatch replay, etc.) —
           # `git commit` would fail the step for no reason otherwise.
-          git diff --cached --quiet && echo "No manifest change, skipping commit." || \
+          if git diff --cached --quiet; then
+            echo "No manifest change, skipping commit."
+          else
             git commit -m "Deploy ${{ github.sha }} to kind-api [skip ci]"
-          git push origin HEAD:release
+            git push origin HEAD:release
+          fi

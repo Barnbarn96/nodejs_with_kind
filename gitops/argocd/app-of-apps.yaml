@@ -1,60 +1,52 @@
 # App-of-apps: this one file is what you point ArgoCD at
-# (`argocd app create -f gitops/argocd/app-of-apps.yaml` or via the UI),
-# and it owns one child Application per environment. Each child syncs its
-# own Kustomize overlay independently, so dev and prod can drift/rollback
-# separately without touching this file again.
+# (`kubectl apply -f gitops/argocd/app-of-apps.yaml`, done by run-all.sh),
+# and it owns one child Application per environment of kind-api. Each child
+# syncs its own Kustomize overlay independently, so dev and prod can
+# drift/roll back separately without touching this file again.
 #
-# Originally a separate standalone repo (gitops-kind-demo); merged into
-# this repo so the whole cluster setup — app, monitoring, and GitOps —
-# lives in one place. See gitops/WRITEUP.md and gitops/PLAN.md for the
-# history and design decisions behind it.
+#   kind-api-dev → gitops/apps/kind-api/overlays/dev  → namespace kind-api-dev
+#   kind-api     → gitops/apps/kind-api/overlays/prod → namespace kind-demo
+#
+# (The prod Application keeps its original name, `kind-api`, so existing
+# clusters update it in place instead of ending up with two Applications
+# fighting over kind-demo.)
+#
+# Originally a separate standalone repo (gitops-kind-demo) with a toy
+# http-echo app; merged into this repo and since narrowed to the real API.
+# See gitops/WRITEUP.md and gitops/PLAN.md for the history.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: demo-app-dev
+  name: kind-api-dev
   namespace: argocd
 spec:
   project: default
   source:
     repoURL: https://github.com/Barnbarn96/nodejs_with_kind.git
     # HEAD resolves to origin/main on GitHub, which is unrelated, stale
-    # content from before this repo's real work began (left untouched
-    # deliberately) — all real work lives on the `release` branch instead.
+    # content from before this repo's real work began — all real work
+    # lives on the `release` branch instead.
     targetRevision: release
-    path: gitops/apps/demo-app/overlays/dev
+    path: gitops/apps/kind-api/overlays/dev
   destination:
     server: https://kubernetes.default.svc
-    namespace: demo-app-dev
+    namespace: kind-api-dev
+  # The HPA changes the Rollout's replica count at runtime. Without this,
+  # selfHeal would keep resetting it to the value in Git and fight the
+  # autoscaler.
+  ignoreDifferences:
+    - group: argoproj.io
+      kind: Rollout
+      name: api
+      jsonPointers:
+        - /spec/replicas
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
----
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: demo-app-prod
-  namespace: argocd
-spec:
-  project: default
-  source:
-    repoURL: https://github.com/Barnbarn96/nodejs_with_kind.git
-    # HEAD resolves to origin/main on GitHub, which is unrelated, stale
-    # content from before this repo's real work began (left untouched
-    # deliberately) — all real work lives on the `release` branch instead.
-    targetRevision: release
-    path: gitops/apps/demo-app/overlays/prod
-  destination:
-    server: https://kubernetes.default.svc
-    namespace: demo-app-prod
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
-    syncOptions:
-      - CreateNamespace=true
+      - RespectIgnoreDifferences=true
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: Application
@@ -66,13 +58,21 @@ spec:
   source:
     repoURL: https://github.com/Barnbarn96/nodejs_with_kind.git
     targetRevision: release
-    path: gitops/apps/kind-api
+    path: gitops/apps/kind-api/overlays/prod
   destination:
     server: https://kubernetes.default.svc
     namespace: kind-demo
+  # See the note on kind-api-dev above.
+  ignoreDifferences:
+    - group: argoproj.io
+      kind: Rollout
+      name: api
+      jsonPointers:
+        - /spec/replicas
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
+      - RespectIgnoreDifferences=true

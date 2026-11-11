@@ -15,30 +15,15 @@ if [ -z "${DISCORD_WEBHOOK_URL:-}" ]; then
 fi
 
 # Run scripts one by one
+# create-cluster.sh waits for all nodes to be Ready before returning.
 ./scripts/create-cluster.sh
-# No local build/load step anymore — the api image is built and pushed to
-# ghcr.io by .github/workflows/build-and-push.yml on every push to
-# `release`, and deployed via ArgoCD (gitops/apps/kind-api/) further below,
-# not here.
-# Wait for cluster to be ready
-sleep 60
-# Retry deploy.sh up to 3 times
-echo "🚀 Starting deployment with retry logic..."
-for i in {1..3}; do
-  echo "Deployment attempt $i/3..."
-  if ./scripts/deploy.sh; then
-    echo "✅ Deployment successful!"
-    break
-  else
-    if [ $i -lt 3 ]; then
-      echo "⚠️  Deployment failed, retrying in 5 seconds..."
-      sleep 5
-    else
-      echo "❌ Deployment failed after 3 attempts"
-      exit 1
-    fi
-  fi
-done
+# No local build/load step — the api image is built and pushed to ghcr.io
+# by .github/workflows/build-and-push.yml on every push to `release`, and
+# deployed via ArgoCD (gitops/apps/kind-api/, dev + prod overlays) further below.
+#
+# deploy.sh only creates the namespaces and Secrets now; each namespace is
+# applied first, so the old sleep-and-retry loop is no longer needed.
+./scripts/deploy.sh
 ./scripts/deploy-metrics-server.sh
 ./scripts/deploy-monitoring.sh
 
@@ -46,7 +31,7 @@ echo "🚀 Installing ArgoCD and Argo Rollouts..."
 ./scripts/install-argocd.sh
 ./scripts/install-argo-rollouts.sh
 
-echo "🚀 Registering GitOps Applications (demo-app-dev, demo-app-prod, kind-api)..."
+echo "🚀 Registering GitOps Applications (kind-api-dev, kind-api)..."
 kubectl apply -f gitops/argocd/app-of-apps.yaml
 
 # install-argocd.sh/install-argo-rollouts.sh already wait for their own
@@ -54,7 +39,7 @@ kubectl apply -f gitops/argocd/app-of-apps.yaml
 # point — this loop is waiting for ArgoCD to actually pull, sync, and get
 # each app's pods healthy, not just for the apply above to succeed.
 echo "⏳ Waiting for GitOps Applications to sync..."
-for app in demo-app-dev demo-app-prod kind-api; do
+for app in kind-api-dev kind-api; do
   synced=""
   for i in $(seq 1 30); do
     # `|| true` — a transient kubectl error here (e.g. right after apply,

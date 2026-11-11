@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+  labels:
+    app: api
+spec:
+  # ClusterIP in the base; overlays/prod switches it to NodePort 30000.
+  # (A NodePort number is cluster-wide, so dev and prod can't both use it.)
+  type: ClusterIP
+  selector:
+    app: api
+  ports:
+    - name: http
+      port: 80
+      targetPort: 3000
+      protocol: TCP

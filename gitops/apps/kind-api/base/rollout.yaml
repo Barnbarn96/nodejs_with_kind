@@ -1,0 +1,90 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: api
+spec:
+  # Starting size only — the HPA (hpa.yaml) owns replicas after that, and the
+  # kind-api Applications ignore drift on /spec/replicas so ArgoCD's selfHeal
+  # doesn't fight it. See gitops/argocd/app-of-apps.yaml.
+  replicas: 2
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      serviceAccountName: api-user
+      # Lets in-flight requests drain: the app flips /ready to failing on
+      # SIGTERM and exits after a short grace period (see src/index.js).
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532   # distroless "nonroot" user
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      # Spread replicas (including canary pods) across both worker nodes.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: api
+      containers:
+        - name: api
+          # Bumped to a specific :<git-sha> tag by
+          # .github/workflows/build-and-push.yml on every push to `release`;
+          # each bump starts a canary rollout.
+          image: ghcr.io/barnbarn96/nodejs_with_kind:60e9c301fc48b2446b33c51c8b85f8bc9c02b4e5
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3000
+          # Requests are what the HPA's averageUtilization is measured
+          # against; limits are what the triage agent compares usage to.
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 3000
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          envFrom:
+            - configMapRef:
+                name: api-config
+            - secretRef:
+                name: api-secret
+  strategy:
+    canary:
+      # The base canary is a plain timed walk. Each overlay adjusts it:
+      # prod adds Prometheus error-rate analysis that aborts a bad canary
+      # (overlays/prod), dev shortens it to roll out fast (overlays/dev).
+      steps:
+        - setWeight: 25
+        - pause:
+            duration: 30s
+        - setWeight: 50
+        - pause:
+            duration: 30s
+        - setWeight: 75
+        - pause:
+            duration: 30s

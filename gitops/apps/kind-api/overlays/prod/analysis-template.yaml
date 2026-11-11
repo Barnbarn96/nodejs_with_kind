@@ -1,0 +1,29 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: api-error-rate
+  namespace: kind-demo
+spec:
+  metrics:
+    - name: error-ratio
+      # Checked every 30s for the whole canary. A second failed measurement
+      # aborts the rollout. Prometheus being unreachable counts as an error
+      # (default limit 4), which also aborts rather than promoting blind.
+      interval: 30s
+      failureLimit: 1
+      successCondition: result[0] < 0.05
+      provider:
+        prometheus:
+          address: http://kube-prom-stack-kube-prome-prometheus.monitoring.svc:9090
+          # Share of requests answered with 5xx over the last minute.
+          # No canary-only split: without a traffic router the canary and
+          # stable pods sit behind the same Service, so this watches the
+          # whole API, which is what users actually see.
+          # `or vector(0)`: http_errors_total doesn't exist until the first
+          # error, and an empty result would otherwise fail the analysis.
+          query: |
+            (
+              sum(rate(http_errors_total{namespace="kind-demo"}[1m]))
+              /
+              clamp_min(sum(rate(http_requests_total{namespace="kind-demo"}[1m])), 1e-9)
+            ) or vector(0)
