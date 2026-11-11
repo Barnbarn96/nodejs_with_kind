@@ -8,6 +8,9 @@ on:
       - src/**
       - package.json
       - package-lock.json
+      # A change to how images are built/deployed should also produce a
+      # fresh build and deploy, so it gets exercised right away.
+      - .github/workflows/build-and-push.yml
   # Lets the first image be built on demand (Actions tab → this workflow →
   # Run workflow) without needing an unrelated code change to satisfy the
   # paths filter above.
@@ -60,9 +63,14 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          # Rebase onto whatever landed on `release` while this build ran,
-          # so the push below doesn't fail as non-fast-forward.
-          git pull --rebase origin release
+          # Start from the latest `release` (anything that landed while this
+          # build ran included), so the push below is a fast-forward. A hard
+          # reset rather than `git pull --rebase`: this job never has its own
+          # edits to keep at this point, and pull --rebase refuses to run if
+          # the checkout looks dirty for any reason (e.g. line-ending
+          # normalization), which is what broke the first post-merge deploy.
+          git fetch --depth=1 origin release
+          git checkout -f -B release FETCH_HEAD
           sed -i "s|image: ${{ env.IMAGE }}:.*|image: ${{ env.IMAGE }}:${{ github.sha }}|" \
             gitops/apps/kind-api/base/rollout.yaml
           git add gitops/apps/kind-api/base/rollout.yaml
@@ -73,5 +81,5 @@ jobs:
             echo "No manifest change, skipping commit."
           else
             git commit -m "Deploy ${{ github.sha }} to kind-api [skip ci]"
-            git push origin HEAD:release
+            git push origin release
           fi
