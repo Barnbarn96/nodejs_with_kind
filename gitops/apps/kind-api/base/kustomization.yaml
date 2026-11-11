@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Shared kind-api manifests, written once. They carry no namespace and no
+# environment-specific values — overlays/dev and overlays/prod set those.
+# Render one with: kubectl kustomize gitops/apps/kind-api/overlays/prod
+#
+# The one resource NOT here is the Secret (manifests/secret.yaml), which
+# scripts/deploy.sh creates in each namespace so credentials aren't part of
+# what ArgoCD syncs from Git.
+resources:
+  - rbac.yaml
+  - configmap.yaml
+  - service.yaml
+  - ingress.yaml
+  - rollout.yaml
+  - hpa.yaml

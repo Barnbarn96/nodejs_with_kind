@@ -19,9 +19,9 @@ fi
 ./scripts/create-cluster.sh
 # No local build/load step — the api image is built and pushed to ghcr.io
 # by .github/workflows/build-and-push.yml on every push to `release`, and
-# deployed via ArgoCD (gitops/apps/kind-api/) further below.
+# deployed via ArgoCD (gitops/apps/kind-api/, dev + prod overlays) further below.
 #
-# deploy.sh only creates the namespace and Secret now; the namespace is
+# deploy.sh only creates the namespaces and Secrets now; each namespace is
 # applied first, so the old sleep-and-retry loop is no longer needed.
 ./scripts/deploy.sh
 ./scripts/deploy-metrics-server.sh
@@ -31,7 +31,7 @@ echo "🚀 Installing ArgoCD and Argo Rollouts..."
 ./scripts/install-argocd.sh
 ./scripts/install-argo-rollouts.sh
 
-echo "🚀 Registering GitOps Applications (demo-app-dev, demo-app-prod, kind-api)..."
+echo "🚀 Registering GitOps Applications (kind-api-dev, kind-api)..."
 kubectl apply -f gitops/argocd/app-of-apps.yaml
 
 # install-argocd.sh/install-argo-rollouts.sh already wait for their own
@@ -39,7 +39,7 @@ kubectl apply -f gitops/argocd/app-of-apps.yaml
 # point — this loop is waiting for ArgoCD to actually pull, sync, and get
 # each app's pods healthy, not just for the apply above to succeed.
 echo "⏳ Waiting for GitOps Applications to sync..."
-for app in demo-app-dev demo-app-prod kind-api; do
+for app in kind-api-dev kind-api; do
   synced=""
   for i in $(seq 1 30); do
     # `|| true` — a transient kubectl error here (e.g. right after apply,

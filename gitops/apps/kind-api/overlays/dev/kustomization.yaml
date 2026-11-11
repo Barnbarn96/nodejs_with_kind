@@ -1,0 +1,60 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# dev = the base, plus:
+#   - namespace kind-api-dev, served at http://localhost/dev/api
+#   - development config
+#   - smaller footprint: 1 replica, HPA capped at 2
+#   - fast canary (one 50% step, 10s) and no error-rate analysis, so
+#     changes land in seconds
+namespace: kind-api-dev
+
+resources:
+  - ../../base
+
+patches:
+  - target:
+      kind: ConfigMap
+      name: api-config
+    patch: |-
+      - op: replace
+        path: /data/MODE
+        value: development
+      - op: replace
+        path: /data/ENV
+        value: dev
+
+  - target:
+      group: argoproj.io
+      kind: Rollout
+      name: api
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+      - op: replace
+        path: /spec/strategy/canary/steps
+        value:
+          - setWeight: 50
+          - pause:
+              duration: 10s
+
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: api-hpa
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 1
+      - op: replace
+        path: /spec/maxReplicas
+        value: 2
+
+  # Same host as prod, different path prefix — both share the one
+  # ingress-nginx controller on localhost:80.
+  - target:
+      kind: Ingress
+      name: api-ingress
+    patch: |-
+      - op: replace
+        path: /spec/rules/0/http/paths/0/path
+        value: /dev/api(/|$)(.*)

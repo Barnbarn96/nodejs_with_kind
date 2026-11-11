@@ -34,10 +34,10 @@ jobs:
           curl -sSL "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz" \
             | tar -xz -C /usr/local/bin kubeconform
 
-      # Renders every Kustomize app and validates the result plus the plain
-      # manifests/monitoring YAML. CRDs (Rollout, AnalysisTemplate,
-      # PrometheusRule, ServiceMonitor, AlertmanagerConfig, Application) are
-      # checked against the community CRDs-catalog schemas.
+      # Renders every kind-api overlay (dev, prod) and validates the result
+      # plus the plain manifests/monitoring YAML. CRDs (Rollout,
+      # AnalysisTemplate, PrometheusRule, ServiceMonitor, AlertmanagerConfig,
+      # Application) are checked against the community CRDs-catalog schemas.
       - name: Render and validate
         run: |
           set -euo pipefail
@@ -45,12 +45,12 @@ jobs:
             -schema-location default
             -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'
           )
-          for dir in gitops/apps/kind-api gitops/apps/demo-app/overlays/dev gitops/apps/demo-app/overlays/prod; do
+          for dir in gitops/apps/kind-api/overlays/*/; do
             echo "== $dir"
             kubectl kustomize "$dir" | kubeconform -strict -summary "${SCHEMAS[@]}" -
           done
           echo "== plain manifests"
           kubeconform -strict -summary "${SCHEMAS[@]}" \
-            manifests/namespace.yaml manifests/secret.yaml \
+            manifests/secret.yaml \
             monitoring/servicemonitor.yaml monitoring/alertmanager-config.yaml \
             monitoring/rules/ gitops/argocd/app-of-apps.yaml

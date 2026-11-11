@@ -14,7 +14,7 @@ COPY src ./src
 
 # ---------- Stage 2: Runtime (Distroless, non-root) ----------
 # :nonroot runs as uid/gid 65532 — matches runAsUser/runAsGroup in
-# gitops/apps/kind-api/rollout.yaml.
+# gitops/apps/kind-api/base/rollout.yaml.
 FROM gcr.io/distroless/nodejs24-debian12:nonroot
 WORKDIR /app
 ENV NODE_ENV=production

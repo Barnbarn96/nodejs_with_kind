@@ -64,8 +64,8 @@ jobs:
           # so the push below doesn't fail as non-fast-forward.
           git pull --rebase origin release
           sed -i "s|image: ${{ env.IMAGE }}:.*|image: ${{ env.IMAGE }}:${{ github.sha }}|" \
-            gitops/apps/kind-api/rollout.yaml
-          git add gitops/apps/kind-api/rollout.yaml
+            gitops/apps/kind-api/base/rollout.yaml
+          git add gitops/apps/kind-api/base/rollout.yaml
           # Nothing to commit if the tag didn't actually change (re-running
           # the same commit's build, workflow_dispatch replay, etc.) —
           # `git commit` would fail the step for no reason otherwise.

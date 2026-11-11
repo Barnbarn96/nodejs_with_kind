@@ -1,0 +1,51 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# prod = the base, plus:
+#   - namespace kind-demo, served at http://localhost/api and NodePort 30000
+#   - production config
+#   - canary guarded by Prometheus error-rate analysis (auto-abort)
+namespace: kind-demo
+
+resources:
+  - ../../base
+  - analysis-template.yaml
+
+patches:
+  - target:
+      kind: ConfigMap
+      name: api-config
+    patch: |-
+      - op: replace
+        path: /data/MODE
+        value: production
+      - op: replace
+        path: /data/ENV
+        value: prod
+
+  # Expose on the host's localhost:30000 (mapped in kind-cluster.yaml).
+  - target:
+      kind: Service
+      name: api
+    patch: |-
+      - op: replace
+        path: /spec/type
+        value: NodePort
+      - op: add
+        path: /spec/ports/0/nodePort
+        value: 30000
+
+  # Runs for the whole rollout and aborts (rolling back to the stable
+  # ReplicaSet) if the API's 5xx ratio crosses the threshold in
+  # analysis-template.yaml. Try it: during a rollout, hit /api/error a few
+  # times and watch the canary get aborted.
+  - target:
+      group: argoproj.io
+      kind: Rollout
+      name: api
+    patch: |-
+      - op: add
+        path: /spec/strategy/canary/analysis
+        value:
+          templates:
+            - templateName: api-error-rate
+          startingStep: 1

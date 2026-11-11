@@ -8,7 +8,9 @@ entirely on a local [KIND](https://kind.sigs.k8s.io/) cluster:
   with graceful shutdown and fail-fast config validation.
 - **Delivery:** GitHub Actions tests the app, validates every manifest,
   builds a non-root distroless image to GHCR and bumps the tag in Git.
-  ArgoCD syncs it and Argo Rollouts runs a canary that **aborts
+  ArgoCD syncs it to two environments built from one set of manifests
+  with Kustomize overlays: **dev** (`/dev/api`, fast canary) and **prod**
+  (`/api`), where Argo Rollouts runs a canary that **aborts
   automatically** if Prometheus sees the 5xx ratio go above 5%.
 - **Monitoring:** `kube-prometheus-stack` (Prometheus Operator) with a
   `ServiceMonitor`, `PrometheusRule`s for pod health and API errors, and an
@@ -21,13 +23,14 @@ entirely on a local [KIND](https://kind.sigs.k8s.io/) cluster:
 push to release ──► CI: tests + kubeconform ──► build image ──► bump tag in Git
                                                                      │
                        ArgoCD (app-of-apps) ◄────────────────────────┘
-                              │
-                     Argo Rollouts canary 25→50→75→100%
-                              │   ▲
-                              ▼   │ AnalysisRun: 5xx ratio < 5%?
-                       kind-api pods ──► Prometheus ──► Alertmanager
-                                                           ├─► Discord
-                                                           └─► triage bridge (:8080)
+                         │                    │
+              overlays/dev                overlays/prod
+         (kind-api-dev, 50% → 100%)   (kind-demo, 25→50→75→100%)
+                                              │   ▲
+                                              ▼   │ AnalysisRun: 5xx ratio < 5%?
+                                   kind-api pods ──► Prometheus ──► Alertmanager
+                                                                        ├─► Discord
+                                                                        └─► triage bridge (:8080)
 ```
 
 ---
@@ -61,12 +64,20 @@ routing/inhibition setup.
 
 ### 2. Access the API
 
+Prod:
+
 ```bash
 curl http://localhost/api
 curl http://localhost/api/version
 curl http://localhost/api/ready    # readiness probe
 curl http://localhost/api/health   # liveness probe
 curl http://localhost/api/error    # simulate an API error (counts as a 5xx)
+```
+
+Dev is the same API under `/dev/api`:
+
+```bash
+curl http://localhost/dev/api      # "Hello from API! Environment: dev"
 ```
 
 ### 3. GitOps pipeline (ArgoCD + Argo Rollouts)
@@ -90,10 +101,10 @@ npm test
 |---|---|
 | `src/` | The API |
 | `test/` | Smoke tests (Node's built-in test runner) |
-| `gitops/apps/kind-api/` | All of the API's Kubernetes resources, synced by ArgoCD |
-| `gitops/apps/demo-app/` | A tiny canary demo app with dev/prod Kustomize overlays |
+| `gitops/apps/kind-api/base/` | All of the API's Kubernetes resources, written once |
+| `gitops/apps/kind-api/overlays/` | What differs in dev and prod (Kustomize overlays), synced by ArgoCD |
 | `gitops/argocd/` | The app-of-apps ArgoCD Applications |
-| `manifests/` | The only resources applied by hand: the namespace and the Secret |
+| `manifests/` | The only resource applied by hand: the Secret (into both namespaces) |
 | `monitoring/` | ServiceMonitor, PrometheusRules, AlertmanagerConfig, Grafana values |
 | `scripts/` | Cluster bring-up and teardown |
 | `.github/workflows/` | CI (tests + manifest validation) and image build/deploy |

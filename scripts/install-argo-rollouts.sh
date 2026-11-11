@@ -20,9 +20,10 @@ kubectl -n argo-rollouts rollout status deployment/argo-rollouts --timeout=180s
 
 echo
 echo "Done. Useful commands (no plugin required, works with plain kubectl):"
-echo "  kubectl get rollout demo-app -n demo-app-prod -o wide"
-echo "  kubectl describe rollout demo-app -n demo-app-prod"
+echo "  kubectl get rollout api -n kind-demo -o wide        # prod"
+echo "  kubectl get rollout api -n kind-api-dev -o wide     # dev"
+echo "  kubectl describe rollout api -n kind-demo"
 echo
 echo "Optional but much nicer output — install the kubectl-argo-rollouts plugin:"
 echo "  https://argo-rollouts.readthedocs.io/en/stable/installation/#kubectl-plugin-installation"
-echo "  then: kubectl argo rollouts get rollout demo-app -n demo-app-prod --watch"
+echo "  then: kubectl argo rollouts get rollout api -n kind-demo --watch"

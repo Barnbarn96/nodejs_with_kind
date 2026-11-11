@@ -2,10 +2,9 @@ apiVersion: argoproj.io/v1alpha1
 kind: Rollout
 metadata:
   name: api
-  namespace: kind-demo
 spec:
   # Starting size only — the HPA (hpa.yaml) owns replicas after that, and the
-  # kind-api Application ignores drift on /spec/replicas so ArgoCD's selfHeal
+  # kind-api Applications ignore drift on /spec/replicas so ArgoCD's selfHeal
   # doesn't fight it. See gitops/argocd/app-of-apps.yaml.
   replicas: 2
   selector:
@@ -76,14 +75,9 @@ spec:
                 name: api-secret
   strategy:
     canary:
-      # Runs for the whole rollout and aborts (rolling back to the stable
-      # ReplicaSet) if the API's 5xx ratio crosses the threshold in
-      # analysis-template.yaml. Try it: during a rollout, hit /api/error a
-      # few times and watch the canary get aborted.
-      analysis:
-        templates:
-          - templateName: api-error-rate
-        startingStep: 1
+      # The base canary is a plain timed walk. Each overlay adjusts it:
+      # prod adds Prometheus error-rate analysis that aborts a bad canary
+      # (overlays/prod), dev shortens it to roll out fast (overlays/dev).
       steps:
         - setWeight: 25
         - pause:

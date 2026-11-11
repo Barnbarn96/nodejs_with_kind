@@ -23,7 +23,7 @@ spec:
       - matchers:
           - name: namespace
             matchType: "=~"
-            value: "default|kind-demo"
+            value: "default|kind-demo|kind-api-dev"
         continue: false
         receiver: discord-default
         groupBy: ["alertname", "namespace", "pod"]
