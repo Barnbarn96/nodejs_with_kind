@@ -38,7 +38,7 @@ spec:
           # Bumped to a specific :<git-sha> tag by
           # .github/workflows/build-and-push.yml on every push to `release`;
           # each bump starts a canary rollout.
-          image: ghcr.io/barnbarn96/nodejs_with_kind:60e9c301fc48b2446b33c51c8b85f8bc9c02b4e5
+          image: ghcr.io/barnbarn96/nodejs_with_kind:0c62b3eeea89b58765602cff3f678579a5b4c684
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3000
