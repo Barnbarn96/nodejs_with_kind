@@ -258,8 +258,13 @@ spec:
   — meaning `triage-bridge` would never have received a real alert at all,
   silently, with no error anywhere. Fixed with `kubectl patch alertmanager
   kube-prom-stack-kube-prome-alertmanager -n monitoring --type=merge -p
-  '{"spec":{"alertmanagerConfigMatcherStrategy":{"type":"None"}}}'` (now
-  baked into `deploy-operator-resources.sh`, not a one-off manual step).
+  '{"spec":{"alertmanagerConfigMatcherStrategy":{"type":"None"}}}'`.
+  **Update:** that patch has since moved into Helm values
+  (`--set alertmanager.alertmanagerSpec.alertmanagerConfigMatcherStrategy.type=None`
+  in `scripts/deploy-monitoring.sh`), because a `kubectl patch` on a
+  Helm-managed object is reverted by the next `helm upgrade`.
+  `deploy-operator-resources.sh` now only checks the field and warns if
+  it's missing.
 - Discord's `discordConfigs` field on `AlertmanagerConfig` requires a modern
   enough Alertmanager (>= v0.25) — confirm the chart's bundled Alertmanager
   version supports it before relying on it; older versions only had generic

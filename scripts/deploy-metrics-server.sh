@@ -6,8 +6,11 @@
 # but every scrape fails with an x509 error and `kubectl top` stays empty.
 set -euo pipefail
 
-echo "📊 Installing metrics-server..."
-kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+# Pinned so respins are reproducible; override to upgrade deliberately.
+METRICS_SERVER_VERSION="${METRICS_SERVER_VERSION:-v0.9.1}"
+
+echo "📊 Installing metrics-server ${METRICS_SERVER_VERSION}..."
+kubectl apply -f "https://github.com/kubernetes-sigs/metrics-server/releases/download/${METRICS_SERVER_VERSION}/components.yaml"
 
 # Idempotent: adding the same arg twice would make metrics-server fail to start,
 # so only patch when it isn't already present.

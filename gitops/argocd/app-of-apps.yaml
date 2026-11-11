@@ -70,9 +70,19 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: kind-demo
+  # The HPA (gitops/apps/kind-api/hpa.yaml) changes the Rollout's replica
+  # count at runtime. Without this, selfHeal would keep resetting it to the
+  # `replicas: 2` in Git and fight the autoscaler.
+  ignoreDifferences:
+    - group: argoproj.io
+      kind: Rollout
+      name: api
+      jsonPointers:
+        - /spec/replicas
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
+      - RespectIgnoreDifferences=true

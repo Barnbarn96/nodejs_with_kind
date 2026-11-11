@@ -31,7 +31,10 @@ kubectl -n ingress-nginx patch deployment ingress-nginx-controller --type='json'
   {"op":"add","path":"/spec/template/spec/tolerations","value":[{"key":"node-role.kubernetes.io/control-plane","operator":"Exists","effect":"NoSchedule"}]}
 ]'
 
-# Create namespace
-kubectl apply -f manifests/namespace.yaml
-# Install metrics-server
-kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+# Replaces the old fixed `sleep 60` in run-all.sh: block until every node
+# reports Ready, so the next steps start as soon as the cluster can take them.
+echo "Waiting for all nodes to be Ready..."
+kubectl wait --for=condition=Ready nodes --all --timeout=180s
+
+# metrics-server is installed (with the KIND-specific TLS flag) by
+# scripts/deploy-metrics-server.sh, not here.

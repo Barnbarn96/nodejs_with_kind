@@ -1,0 +1,12 @@
+# Only package*.json and src/ are needed in the image; keep everything else
+# out of the build context (smaller, faster, and no secrets by accident).
+.git
+.github
+node_modules
+gitops
+manifests
+monitoring
+scripts
+*.md
+.env
+.env.*

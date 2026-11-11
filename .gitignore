@@ -1,7 +1,9 @@
 # Node modules
 node_modules/
 
-./monitoring/discord-webhook-url.yaml
+# Local secrets — never committed
+monitoring/discord-webhook-url.yaml
+
 # Logs
 npm-debug.log*
 yarn-debug.log*
@@ -14,16 +16,9 @@ pnpm-debug.log*
 .idea/
 *.swp
 
-# Docker
-# Dockerfile*
-# docker-compose*
-.dockerignore
-
 # Build artifacts
 dist/
 coverage/
-*.test.js
-*.spec.js
 
 # Environment
 .env

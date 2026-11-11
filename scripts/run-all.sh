@@ -15,30 +15,15 @@ if [ -z "${DISCORD_WEBHOOK_URL:-}" ]; then
 fi
 
 # Run scripts one by one
+# create-cluster.sh waits for all nodes to be Ready before returning.
 ./scripts/create-cluster.sh
-# No local build/load step anymore — the api image is built and pushed to
-# ghcr.io by .github/workflows/build-and-push.yml on every push to
-# `release`, and deployed via ArgoCD (gitops/apps/kind-api/) further below,
-# not here.
-# Wait for cluster to be ready
-sleep 60
-# Retry deploy.sh up to 3 times
-echo "🚀 Starting deployment with retry logic..."
-for i in {1..3}; do
-  echo "Deployment attempt $i/3..."
-  if ./scripts/deploy.sh; then
-    echo "✅ Deployment successful!"
-    break
-  else
-    if [ $i -lt 3 ]; then
-      echo "⚠️  Deployment failed, retrying in 5 seconds..."
-      sleep 5
-    else
-      echo "❌ Deployment failed after 3 attempts"
-      exit 1
-    fi
-  fi
-done
+# No local build/load step — the api image is built and pushed to ghcr.io
+# by .github/workflows/build-and-push.yml on every push to `release`, and
+# deployed via ArgoCD (gitops/apps/kind-api/) further below.
+#
+# deploy.sh only creates the namespace and Secret now; the namespace is
+# applied first, so the old sleep-and-retry loop is no longer needed.
+./scripts/deploy.sh
 ./scripts/deploy-metrics-server.sh
 ./scripts/deploy-monitoring.sh
 

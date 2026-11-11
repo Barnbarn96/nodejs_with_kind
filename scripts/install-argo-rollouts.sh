@@ -10,8 +10,10 @@ kubectl create namespace argo-rollouts 2>/dev/null || echo "  (already exists, s
 echo "Installing Argo Rollouts..."
 # --server-side: same reasoning as install-argocd.sh — the Rollout CRD's
 # schema is large enough to risk the same annotation-size issue.
+# Pinned so respins are reproducible; override to upgrade deliberately.
+ARGO_ROLLOUTS_VERSION="${ARGO_ROLLOUTS_VERSION:-v1.10.2}"
 kubectl apply -n argo-rollouts --server-side --force-conflicts \
-  -f https://github.com/argoproj/argo-rollouts/releases/latest/download/install.yaml
+  -f "https://github.com/argoproj/argo-rollouts/releases/download/${ARGO_ROLLOUTS_VERSION}/install.yaml"
 
 echo "Waiting for the rollout controller to be ready..."
 kubectl -n argo-rollouts rollout status deployment/argo-rollouts --timeout=180s

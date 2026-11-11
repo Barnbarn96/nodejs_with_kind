@@ -30,15 +30,23 @@ kubectl apply -f "$DIR/rules/api-alerts.yaml"
 kubectl apply -f "$DIR/rules/pod-health.yaml"
 kubectl apply -f "$DIR/alertmanager-config.yaml"
 
-# By default the Operator injects a `namespace=<AlertmanagerConfig's own
-# namespace>` matcher into every route and inhibit rule it generates, to
-# stop one namespace's config from affecting another's alerts. Since this
-# AlertmanagerConfig lives in `monitoring` but the alerts it's meant to
-# route come from `default` (where the demo pods run), that scoping would
-# silently make every rule above unreachable — confirmed live: triage-bridge
-# never received an alert until this was disabled. See MIGRATION.md.
-kubectl patch alertmanager kube-prom-stack-kube-prome-alertmanager -n "$NAMESPACE" \
-  --type='merge' -p='{"spec":{"alertmanagerConfigMatcherStrategy":{"type":"None"}}}'
+# alertmanager-config.yaml only works with alertmanagerConfigMatcherStrategy
+# set to None on the Alertmanager CR. By default the Operator injects a
+# `namespace=<AlertmanagerConfig's own namespace>` matcher into every route
+# and inhibit rule it generates. Since this AlertmanagerConfig lives in
+# `monitoring` but routes alerts from `default`/`kind-demo`, that scoping
+# would silently make every rule unreachable — confirmed live: triage-bridge
+# never received an alert until it was disabled. See MIGRATION.md.
+#
+# That field is set through Helm values in scripts/deploy-monitoring.sh, not
+# patched here: a `kubectl patch` on a Helm-managed object gets reverted by
+# the next `helm upgrade`. This check just fails loudly if it's missing.
+strategy=$(kubectl get alertmanager kube-prom-stack-kube-prome-alertmanager -n "$NAMESPACE" \
+  -o jsonpath='{.spec.alertmanagerConfigMatcherStrategy.type}' 2>/dev/null || true)
+if [[ "$strategy" != "None" ]]; then
+  echo "⚠️  Alertmanager alertmanagerConfigMatcherStrategy is '${strategy:-unset}', not 'None'." >&2
+  echo "    Routing to triage-bridge/Discord won't work. Re-run scripts/deploy-monitoring.sh." >&2
+fi
 
 echo
 echo "Applied. Verify with:"

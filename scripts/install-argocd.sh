@@ -21,7 +21,12 @@ echo "Installing ArgoCD..."
 # earlier client-side-apply attempt (e.g. a failed run before this script
 # switched to --server-side) — safe here since nothing else legitimately
 # co-manages these objects.
-kubectl apply -n argocd --server-side --force-conflicts -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+#
+# Pinned to a release tag rather than the moving `stable` branch, so a
+# respin installs the version that was tested. Override to upgrade.
+ARGOCD_VERSION="${ARGOCD_VERSION:-v3.6.1}"
+kubectl apply -n argocd --server-side --force-conflicts \
+  -f "https://raw.githubusercontent.com/argoproj/argo-cd/${ARGOCD_VERSION}/manifests/install.yaml"
 
 echo "Waiting for argocd-server to be ready..."
 kubectl -n argocd rollout status deployment/argocd-server --timeout=180s
@@ -29,5 +34,7 @@ kubectl -n argocd rollout status deployment/argocd-server --timeout=180s
 echo
 echo "Done. To log in:"
 echo "  kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo"
-echo "  kubectl -n argocd port-forward svc/argocd-server 8080:443"
-echo "Then open https://localhost:8080 (user: admin)."
+# 8081, not 8080: host port 8080 is where Alertmanager sends pod alerts to
+# the k8s-triage-agent bridge (monitoring/alertmanager-config.yaml).
+echo "  kubectl -n argocd port-forward svc/argocd-server 8081:443"
+echo "Then open https://localhost:8081 (user: admin)."

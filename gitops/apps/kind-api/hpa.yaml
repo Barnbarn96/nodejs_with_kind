@@ -4,9 +4,11 @@ metadata:
   name: api-hpa
   namespace: kind-demo
 spec:
+  # kind-api is an Argo Rollout, not a Deployment (Rollouts support the
+  # scale subresource, so the HPA works against them directly).
   scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
+    apiVersion: argoproj.io/v1alpha1
+    kind: Rollout
     name: api
   minReplicas: 2
   maxReplicas: 10

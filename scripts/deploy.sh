@@ -1,17 +1,12 @@
 #!/usr/bin/env bash
-# The app's own workload resource (formerly manifests/deployment.yaml) is
-# deliberately NOT applied here — it's now a Rollout managed by ArgoCD
-# (gitops/apps/kind-api/), built via .github/workflows/build-and-push.yml.
-# Applying a plain Deployment with the same pod selector here would fight
-# ArgoCD for ownership of the same pods. Everything else the app needs
-# (RBAC, config, storage, networking) still gets applied imperatively.
+# Applies the only kind-api resources that are NOT GitOps-managed:
+#   - the namespace (needed before the Secret can be created)
+#   - the Secret, kept out of what ArgoCD syncs so credentials have their
+#     own path (swap for Sealed Secrets / External Secrets in a real setup)
+#
+# Everything else — Rollout, Service, Ingress, ConfigMap, RBAC, HPA, canary
+# AnalysisTemplate — lives in gitops/apps/kind-api/ and is synced by the
+# `kind-api` ArgoCD Application (gitops/argocd/app-of-apps.yaml).
 set -euo pipefail
-kubectl apply -f manifests/configmap.yaml
-kubectl apply -f manifests/hpa.yaml
-kubectl apply -f manifests/ingress.yaml
 kubectl apply -f manifests/namespace.yaml
-kubectl apply -f manifests/pv.yaml
-kubectl apply -f manifests/pvc.yaml
-kubectl apply -f manifests/rbac.yaml
 kubectl apply -f manifests/secret.yaml
-kubectl apply -f manifests/service.yaml

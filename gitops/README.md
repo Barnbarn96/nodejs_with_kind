@@ -25,11 +25,18 @@ registry) are gone too — there's now exactly one way the app image gets
 built and deployed, not a local-only path and a GitOps path that could
 drift apart.
 
-`scripts/deploy.sh` still applies everything else the app needs (RBAC,
-`ConfigMap`, `Secret`, `Service`, HPA, Ingress, PV/PVC) — just not the
-workload resource itself anymore, since ArgoCD owns that now and a second
-controller applying a plain `Deployment` with the same pod selector would
-fight it for ownership.
+Everything else the app needs (RBAC, `ConfigMap`, `Service`, Ingress, HPA,
+and the canary `AnalysisTemplate`) now lives in `apps/kind-api/` too, so
+ArgoCD owns the whole app. `scripts/deploy.sh` only creates the namespace
+and the `Secret`, which stays out of Git-synced resources so credentials
+have their own path (Sealed Secrets / External Secrets in a real setup).
+The PV/PVC were removed: the app never wrote to them, and a
+`ReadWriteOnce` volume pinned every replica, canary pods included, to one
+node.
+
+The HPA targets the `Rollout` directly, and the `kind-api` Application
+ignores drift on the Rollout's `/spec/replicas` so ArgoCD's `selfHeal`
+doesn't undo the autoscaler.
 
 ## Structure
 
@@ -41,7 +48,9 @@ gitops/
       overlays/dev/         # 2 replicas, text=dev-v1
       overlays/prod/        # base replica count, text=v1
     kind-api/
-      rollout.yaml           # this repo's real app, same canary strategy
+      rollout.yaml           # this repo's real app, canary + Prometheus analysis
+      analysis-template.yaml # aborts the canary if the 5xx ratio goes above 5%
+      service.yaml, ingress.yaml, configmap.yaml, rbac.yaml, hpa.yaml
   argocd/
     app-of-apps.yaml         # one file, three child Applications
 ```
@@ -63,8 +72,8 @@ respin).
 - For `kind-api` specifically: at least one push to `release` touching
   `src/`/`Dockerfile`/the package files, to trigger
   `.github/workflows/build-and-push.yml` and produce a real image tag —
-  the `Rollout` bootstraps against `:latest`, which won't exist until
-  that first build runs. (No manual "set package visibility" step needed
+  the workflow only pushes immutable `:<git-sha>` tags and writes that tag
+  into the `Rollout`. (No manual "set package visibility" step needed
   in practice — the first image pushed here was already pullable
   anonymously; see `WRITEUP.md` if a private-by-default GHCR package
   ever does need to be made public.)
@@ -86,8 +95,10 @@ respective controllers into it. `install-argocd.sh` prints the admin
 login/port-forward commands once done:
 ```bash
 kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo
-kubectl -n argocd port-forward svc/argocd-server 8080:443
+kubectl -n argocd port-forward svc/argocd-server 8081:443
 ```
+(8081, because host port 8080 is where Alertmanager sends pod alerts to the
+k8s-triage-agent bridge.)
 
 ### 3. Register the app-of-apps
 ```bash
@@ -131,3 +142,14 @@ curl http://localhost/api/version   # confirm it's serving the new version
 
 Same rollback mechanism (`git revert` on the *code* commit — CI will
 build and auto-bump a revert image the same way) applies.
+
+Unlike `demo-app`, a bad `kind-api` canary doesn't need a broken readiness
+probe to be caught: the `api-error-rate` analysis queries Prometheus every
+30s during the rollout and **aborts automatically** if more than 5% of
+requests return 5xx. To see it, start a rollout and generate errors:
+
+```bash
+for i in $(seq 1 30); do curl -s http://localhost/api/error >/dev/null; sleep 1; done
+kubectl get analysisrun -n kind-demo
+kubectl get rollout api -n kind-demo   # Degraded / aborted, stable version still serving
+```
